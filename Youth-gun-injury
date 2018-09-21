@@ -1,0 +1,119 @@
+## This code creates a new dataframe containing gun injury
+## in Newham for those under 25, its comparators and London
+## denominator data comes from population under 25
+## data created in "Subset population.R"
+## data frame is saved as "cleaned_LAS_gun.xlsx"
+## https://www.london.gov.uk/what-we-do/mayors-office-policing-and-crime-mopac/data-and-statistics/crime%20/gangs-dashboard
+
+#Load 'gdata' package
+library(gdata)
+#Loading data from Excel
+require(gdata)
+#Link the Excel Databook at your file path
+library(tidyverse)
+library(openxlsx)
+library(Hmisc)
+
+getwd()
+
+#Clean work space
+remove(list = ls())
+
+
+datfile = "Gun Injury LAS.xlsx"
+#Call "read.xls" to read the specific Excel data sheet
+gun.LAS <- read.xls(datfile, sheet="Sheet1", perl="/usr/bin/perl")
+#View the data
+View(gun.LAS)
+
+#Subset Newham data
+Newham.gun <- subset(gun.LAS, gun.LAS$Borough=="Newham")
+Newham.gun <- Newham.gun[,-2]
+colnames(Newham.gun)[2] <- "Newham"
+
+#Create a vector of Newham's comparator boroughs to subset
+comparators <- c("Barking and Dagenham", "Brent" ,"Hackney", "Tower Hamlets", "Waltham Forest")
+comparators.gun <- subset(gun.LAS, gun.LAS$Borough %in% comparators)
+
+#Group comparators by date to aggregate results into a sum value
+#for gun crime in all comparators
+comparators.gun <- comparators.gun %>% 
+  group_by(Date) %>% 
+  summarise(Comparators = sum(Total))
+
+#Calculate the aggregated London averages for each date
+london.gun <- gun.LAS %>%
+  group_by(Date) %>% 
+  summarise(London = sum(Total))
+
+gun.injury <- merge(x=Newham.gun , y=comparators.gun, by = "Date", all = TRUE)
+gun.injury <- merge(x=gun.injury, y=london.gun, by = "Date", all = TRUE)
+
+#write.xlsx(gun.injury, "cleaned_LAS_gun.xlsx")
+
+#Summarise all data by single year
+gun.injury$Date <- as.Date(gun.injury$Date)
+
+# Calculate the sum of youth gun injuries in Newham, London and
+# Comparators for each year by selecting the first month of the next year
+# as an estimate of the total injuries over the previous 12 months due
+# to the use of 12-month rolling data from London Gang's Dashboard
+
+require(lubridate)
+gun.injury$Date <- ymd(gun.injury$Date)
+gun.injury$Month <- month(ymd(gun.injury$Date))
+
+# subset all observations which are on the first month of the year to account
+# for the 12 month rolling nature of observations in the year prior
+gun.injury <- subset(gun.injury, Month == 3)
+gun.injury <- gun.injury[,-5]
+
+# rename Date column to relfect the dates under the rolling section
+# data relfects the 12 months prior to the 3rd of the year, including
+# data from 9 months of the previous year
+gun.injury$Date <- c("2011-2012", "2012-2013", "2013-2014", "2014-2015", "2015-2016", "2016-2017")
+
+#write.xlsx(gun.injury, "yearly_LAS_gun.xlsx")
+
+gun.injury <- gun.injury[,-1]
+
+#load denominator
+load("Population_25.Rdata")
+#Sum columns containing comparator boroughs
+
+Allpop25 <- as.data.frame(t(Allpop25))
+
+#transposing alters column names to factor - must rename to string
+colnames(Allpop25) =c("Barking and Dagenham", "Brent", "Hackney", "Newham", "Tower Hamlets", "Waltham Forest", "London")
+
+#reorder items
+Allpop25 <- Allpop25[, c(4,1,2,3,5,6,7)]
+
+##transposing alters column names to factor - must rename to numeric
+Allpop25$Newham <- as.numeric(as.character(Allpop25$Newham))
+Allpop25$`Barking and Dagenham` <- as.numeric(as.character(Allpop25$`Barking and Dagenham`))
+Allpop25$Brent <- as.numeric(as.character(Allpop25$Brent))
+Allpop25$Hackney <- as.numeric(as.character(Allpop25$Hackney))
+Allpop25$`Tower Hamlets` <- as.numeric(as.character(Allpop25$`Tower Hamlets`))
+Allpop25$`Waltham Forest` <- as.numeric(as.character(Allpop25$`Waltham Forest`))
+Allpop25$London <- as.numeric(as.character(Allpop25$London))
+
+#sum all comparator boroughs to new column
+Allpop25$Comparator <- rowSums(Allpop25[, c(2,3,4,5,6)])
+
+#reorder items
+Allpop25 <- Allpop25[, c(1,8,7,2,3,4,5,6)]
+
+#exclude items not in discharge number dataframe
+# include only results from piloting
+exclude <- names(Allpop25) %in% c("Barking and Dagenham", "Brent", "Hackney", "Tower Hamlets", "Waltham Forest")
+pop_denom <- Allpop25[!exclude]
+pop_denom <- pop_denom[-1,]
+
+# calculate the gun injury rate by individuals under 25 
+# per 10,000 individuals under 25 years
+gun.injury.rate <- (gun.injury/pop_denom)*10000
+
+#write.xlsx(gun.injury.rate, "gun.injury.rate.xlsx")
+
+remove(list = ls())
