@@ -1,0 +1,124 @@
+# Proven offences 2015-2016 by young people by YOT,
+# offence type, age, gender and ethnicity year ending March 2016
+# (This is the last known publicly published dataset of this kind)
+
+#Load 'gdata' package
+library(gdata)
+#Loading data from Excel
+require(gdata)
+#Link the Excel Databook at your file path
+library(tidyverse)
+library(openxlsx)
+library(Hmisc)
+
+getwd()
+
+#Clean work space
+remove(list = ls())
+
+datfile = "Youth offenses with demo.xlsx"
+#Call "read.xls" to read the specific Excel data sheet
+Offenses <- read.xls(datfile, sheet="Sheet1", perl="/usr/bin/perl")
+#View the data
+View(Offenses)
+
+describe(Offenses$Off_Type)
+
+#Subset Newham data
+Newham.offenses <- subset(Offenses, Offenses$YOT2=="Newham")
+Newham.offenses <- Newham.offenses[,-2]
+
+Newham.offenses$Borough <- "Newham"
+Newham.offenses <- Newham.offenses[,-1]
+Newham.offenses <- Newham.offenses[, c(6, 1, 2, 3, 4, 5)]
+Newham.offenses <- mutate_all(Newham.offenses, funs(toupper))
+
+#Create a vector of Newham's comparator boroughs to subset
+comparators <- c("Barking and Dagenham", "Brent" ,"Hackney", "Tower Hamlets", "Waltham Forest")
+comparators.offenses <- subset(Offenses, Offenses$YOT2 %in% comparators)
+comparators.offenses <- comparators.offenses [,-2]
+describe(comparators.offenses)
+
+comparators.offenses$Borough <- "Comparator"
+comparators.offenses <- comparators.offenses[,-1]
+comparators.offenses <- comparators.offenses[, c(6, 1, 2, 3, 4, 5)]
+comparators.offenses <- mutate_all(comparators.offenses, funs(toupper))
+
+#Subset London only
+london.offenses <- subset(Offenses, Offenses$Region=="London")
+london.offenses <- london.offenses[,-2]
+describe(london.offenses)
+
+london.offenses$Borough <- "London"
+london.offenses <- london.offenses[,-1]
+london.offenses <- london.offenses[, c(6, 1, 2, 3, 4, 5)]
+london.offenses <- mutate_all(london.offenses, funs(toupper))
+
+offense.all <- merge(x=Newham.offenses, y=comparators.offenses, all = TRUE)
+offense.all <- merge(x=offense.all, y=london.offenses, all = TRUE)
+
+#Mutate all variables to CAPITAL due to inconsistency in dataset of offense type
+library(dplyr)
+offense.all <- mutate_all(offense.all, funs(toupper))
+
+# Summarise by each variable available and write to excel
+all.off <- table(offense.all$Off_Type, by=offense.all$Borough)
+all.gen <- table(offense.all$Gen, by=offense.all$Borough)
+all.age <- table(offense.all$Age_Revised, by=offense.all$Borough)
+all.eth <- table(offense.all$Ethnicity, by=offense.all$Borough)
+all.count <- table(offense.all$CountOfOff_ID, by=offense.all$Borough)
+
+#write.xlsx(all.off, "offenses by type.xlsx")
+#write.xlsx(all.gen, "offenses by gender.xlsx")
+#write.xlsx(all.age, "offenses by age.xlsx")
+#write.xlsx(all.eth, "offenses by ethnicity.xlsx")
+#write.xlsx(all.count, "offenses by count of offense.xlsx")
+
+library(ggplot2)
+
+# bar charts for offense type
+Newham.offenses %>% ggplot(aes(Off_Type)) + 
+  geom_bar() + 
+  labs(x= "Offense Type", y= "Frequency of Offense", title="Frequency of Youth Offenses in Newham by Type of Offense") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  theme(plot.subtitle = element_text(hjust = 0.5)) + 
+  coord_flip() +
+  theme_minimal()
+
+ggsave(file.path("Newham Offense Type.png"))
+
+
+comparators.offenses %>% ggplot(aes(Off_Type)) + 
+  geom_bar() + 
+  labs(x= "Offense Type", y= "Frequency of Offense", title="Frequency of Youth Offenses in Comparator Boroughs by Type of Offense") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  theme(plot.subtitle = element_text(hjust = 0.5)) + 
+  coord_flip() +
+  theme_minimal()
+
+ggsave(file.path("Comparator Offense Type.png"))
+
+
+london <- london.offenses %>% ggplot(aes(Off_Type)) + 
+  geom_bar() + 
+  labs(x= "Offense Type", y= "Frequency of Offense", title="Frequency of Youth Offenses in London by Type of Offense") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  theme(plot.subtitle = element_text(hjust = 0.5)) + 
+  coord_flip() +
+  theme_minimal()
+
+ggsave(file.path("London Offense Type.png"))
+
+london.pie <- london + coord_polar(theta = "x")
+london.pie
+
+
+offense.all %>% ggplot(aes(Off_Type, fill=Borough)) +
+  geom_bar() + 
+  labs(x= "Offense Type", y= "Frequency of Offense", title="Frequency of Youth Offenses by Type of Offense") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  theme(plot.subtitle = element_text(hjust = 0.5)) + 
+  coord_flip() +
+  theme_minimal()
+
+remove(list = ls())
