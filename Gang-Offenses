@@ -1,0 +1,120 @@
+## This code summarises data on crimes where 
+## individuals believe ganags are involved
+## data frame is saved as "gang offenses.xlsx"
+## https://www.london.gov.uk/what-we-do/mayors-office-policing-and-crime-mopac/data-and-statistics/crime%20/gangs-dashboard
+
+#Load 'gdata' package
+library(gdata)
+#Loading data from Excel
+require(gdata)
+#Link the Excel Databook at your file path
+library(tidyverse)
+library(openxlsx)
+library(Hmisc)
+
+getwd()
+
+#Clean work space
+remove(list = ls())
+
+datfile = "Gang Offenses.xlsx"
+#Call "read.xls" to read the specific Excel data sheet
+Gang <- read.xls(datfile, sheet="Sheet1", perl="/usr/bin/perl")
+#View the data
+View(Gang)
+
+#Subset Newham data
+Newham.gang <- subset(Gang, Gang$Borough=="Newham")
+
+#Create a vector of Newham's comparator boroughs to subset
+comparators <- c("Barking and Dagenham", "Brent" ,"Hackney", "Tower Hamlets", "Waltham Forest")
+comparators.gang <- subset(Gang, Gang$Borough %in% comparators)
+
+#Group comparators by date to aggregate results into a sum value
+#for gangs in all comparators
+comparators.gang <- comparators.gang %>% 
+  group_by(Date) %>% 
+  summarise(Comparators = sum(Total))
+
+#Group Newham by date to aggregate results into a mean value
+#for gang in all comparators
+Newham.gang <- Newham.gang %>% 
+  group_by(Date) %>% 
+  summarise(Newham = sum(Total))
+
+#Calculate the aggregated London averages for each date
+london.gang <- Gang %>%
+  group_by(Date) %>% 
+  summarise(London = sum(Total))
+
+Gang <- merge(x=Newham.gang, y=comparators.gang, by = "Date", all = TRUE)
+Gang <- merge(x=Gang, y=london.gang, by = "Date", all = TRUE)
+
+#write.xlsx(Gang, "cleaned_gang.xlsx")
+
+#Summarise all data by single year
+Gang$Date <- as.Date(Gang$Date)
+
+# Calculate the sum of gang crime in Newham, London and
+# Comparators for each year by selecting the first month of the next year
+# as an estimate of the total injuries over the previous 12 months due
+# to the use of 12-month rolling data from London Gang's Dashboard
+
+require(lubridate)
+Gang$Date <- ymd(Gang$Date)
+Gang$Month <- month(ymd(Gang$Date))
+
+# subset all observations which are on the first month of the year to account
+# for the 12 month rolling nature of observations in the year prior
+Gang <- subset(Gang, Month == 3)
+Gang <- Gang[,-5]
+
+# rename Date column to relfect the dates under the rolling section
+# data relfects the 12 months prior to the 3rd of the year, including
+# data from 9 months of the previous year
+Gang$Date <- c("2011-2012", "2012-2013", "2013-2014", "2014-2015", "2015-2016", "2016-2017")
+
+#write.xlsx(Gang, "yearly_gang.xlsx")
+
+Gang <- Gang[,-1]
+
+#load denominator
+load("Population.Rdata")
+#Sum columns containing comparator boroughs
+
+Allpop <- as.data.frame(t(Allpop))
+
+#transposing alters column names to factor - must rename to string
+colnames(Allpop) =c("Barking and Dagenham", "Brent", "Hackney", "Newham", "Tower Hamlets", "Waltham Forest", "London")
+Allpop = Allpop[-1, ]
+
+#reorder items
+Allpop <- Allpop[, c(4,1,2,3,5,6,7)]
+
+##transposing alters column names to factor - must rename to numeric
+Allpop$Newham <- as.numeric(as.character(Allpop$Newham))
+Allpop$`Barking and Dagenham` <- as.numeric(as.character(Allpop$`Barking and Dagenham`))
+Allpop$Brent <- as.numeric(as.character(Allpop$Brent))
+Allpop$Hackney <- as.numeric(as.character(Allpop$Hackney))
+Allpop$`Tower Hamlets` <- as.numeric(as.character(Allpop$`Tower Hamlets`))
+Allpop$`Waltham Forest` <- as.numeric(as.character(Allpop$`Waltham Forest`))
+Allpop$London <- as.numeric(as.character(Allpop$London))
+
+#sum all comparator boroughs to new column
+Allpop$Comparator <- rowSums(Allpop[, c(2,3,4,5,6)])
+
+#reorder items
+Allpop <- Allpop[, c(1,8,7,2,3,4,5,6)]
+
+#exclude items not in discharge number dataframe
+# include only results from piloting
+exclude <- names(Allpop) %in% c("Barking and Dagenham", "Brent", "Hackney", "Tower Hamlets", "Waltham Forest")
+pop_denom <- Allpop[!exclude]
+
+# calculate the discharge rate by individuals under 25 
+# per 10,000 individuals under 25 years
+gang.rate <- (Gang/pop_denom)*10000
+
+#write.xlsx(gang.rate, "gang rate.xlsx")
+
+remove(list = ls())
