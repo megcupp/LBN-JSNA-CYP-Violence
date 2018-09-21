@@ -1,0 +1,110 @@
+## This code creates a new dataframe containing the number of gun discharges
+## https://www.london.gov.uk/what-we-do/mayors-office-policing-and-crime-mopac/data-and-statistics/crime%20/gangs-dashboard
+## in Newham for those under 25, its comparators and London - per month
+## denominator data comes from population under 25
+## data created in "Subset population.R"
+## data frame is saved as "cleaned_gun_discharges.xlsx"
+
+#Load 'gdata' package
+library(gdata)
+#Loading data from Excel
+require(gdata)
+#Link the Excel Databook at your file path
+library(tidyverse)
+library(openxlsx)
+
+getwd()
+
+#Clean work space
+remove(list = ls())
+
+datfile = "Gun discharges.xlsx"
+#Call "read.xls" to read the specific Excel data sheet
+Discharges <- read.xls(datfile, sheet="Sheet1", perl="/usr/bin/perl")
+#View the data
+View(Discharges)
+
+#Subset Newham data
+Newham.dis <- subset(Discharges, Discharges$BOCU.Name=="Newham")
+colnames(Newham.dis)[3] <- "Newham"
+
+exclude <- names(Newham.dis) %in% c("BOCU.Name") 
+Newham.dis <- Newham.dis[!exclude]
+
+#Create a vector of Newham's comparator boroughs to subset
+comparators <- c("Barking and Dagenham", "Brent" ,"Hackney", "Tower Hamlets", "Waltham Forest")
+comparators.dis <- subset(Discharges, Discharges$BOCU.Name %in% comparators)
+
+#Group comparators by date to aggregate results into a sum value for all comparators
+aggr.comparators.dis <- comparators.dis %>% 
+  group_by(Month.Year) %>% 
+  summarise(Comparator =sum(Total))
+
+#Calculate the aggregated London averages for each date
+aggr.london.dis <- Discharges%>% 
+  group_by(Month.Year) %>% 
+  summarise(London =sum(Total))
+
+final.dis <- merge(x=Newham.dis, y=aggr.comparators.dis, by = "Month.Year", all = TRUE)
+final.dis <- merge(x=final.dis, y=aggr.london.dis, by = "Month.Year", all = TRUE)
+
+#write.xlsx(final.dis, "cleaned_gun_discharges.xlsx")
+
+#Summarise all data by single year
+final.dis$Month.Year <- as.Date(final.dis$Month.Year)
+
+#Calculate the sum of discharges in Newham, London and Comparators per year
+require(lubridate)
+years <- year(as.Date(final.dis$Month.Year, "%d-%b-%y"))
+Newham <- tapply(final.dis$Newham, years, sum)
+Comparator <- tapply(final.dis$Comparator, years, sum)
+London <- tapply(final.dis$London, years, sum)
+
+#create a data frame for the sum of discharges per year
+yearly.dis <- data.frame(Newham, Comparator, London)
+
+#write.xlsx(yearly.dis, "yearly_gun_discharges.xlsx")
+
+#load denominator
+load("Population.Rdata")
+#Sum columns containing comparator boroughs
+
+Allpop <- as.data.frame(t(Allpop))
+
+#transposing alters column names to factor - must rename to string
+colnames(Allpop) =c("Barking and Dagenham", "Brent", "Hackney", "Newham", "Tower Hamlets", "Waltham Forest", "London")
+Allpop = Allpop[-1, ]
+
+#reorder items
+Allpop <- Allpop[, c(4,1,2,3,5,6,7)]
+
+##transposing alters column names to factor - must rename to numeric
+Allpop$Newham <- as.numeric(as.character(Allpop$Newham))
+Allpop$`Barking and Dagenham` <- as.numeric(as.character(Allpop$`Barking and Dagenham`))
+Allpop$Brent <- as.numeric(as.character(Allpop$Brent))
+Allpop$Hackney <- as.numeric(as.character(Allpop$Hackney))
+Allpop$`Tower Hamlets` <- as.numeric(as.character(Allpop$`Tower Hamlets`))
+Allpop$`Waltham Forest` <- as.numeric(as.character(Allpop$`Waltham Forest`))
+Allpop$London <- as.numeric(as.character(Allpop$London))
+
+#sum all comparator boroughs to new column
+Allpop$Comparator <- rowSums(Allpop[, c(2,3,4,5,6)])
+
+#reorder items
+Allpop <- Allpop[, c(1,8,7,2,3,4,5,6)]
+
+#exclude items not in discharge number dataframe
+# include only results from piloting
+exclude <- names(Allpop) %in% c("Barking and Dagenham", "Brent", "Hackney", "Tower Hamlets", "Waltham Forest")
+pop_denom <- Allpop[!exclude]
+
+# calculate the discharge rate by individuals under 25 
+# per 10,000 individuals under 25 years
+discharge.rate <- (yearly.dis/pop_denom)*10000
+
+write.xlsx(yearly.dis, "yearly discharges.xlsx")
+save(yearly.dis, file="discharges.Rdata")
+
+#write.xlsx(discharge.rate, "discharge rate.xlsx")
+
+remove(list = ls())
